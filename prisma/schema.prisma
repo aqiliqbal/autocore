@@ -1,0 +1,426 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model UserProfile {
+  id                String             @id @default(uuid()) @db.Uuid
+  authUserId        String             @unique @db.Uuid
+  fullName          String
+  email             String             @unique
+  role              UserRole           @default(SALES_STAFF)
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  auditLogs         AuditLog[]
+  createdPurchases  Purchase[]         @relation("PurchaseCreatedBy")
+  createdSales      Sale[]             @relation("SaleCreatedBy")
+  stockTransactions StockTransaction[]
+
+  @@index([role])
+  @@index([isActive])
+}
+
+model Category {
+  id               String     @id @default(uuid()) @db.Uuid
+  name             String     @unique
+  description      String?
+  isActive         Boolean    @default(true)
+  parentCategoryId String?    @db.Uuid
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  parent           Category?  @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id])
+  children         Category[] @relation("CategoryHierarchy")
+  parts            Part[]
+
+  @@index([parentCategoryId])
+}
+
+model Vehicle {
+  id                 String            @id @default(uuid()) @db.Uuid
+  make               String
+  model              String
+  variant            String?
+  yearFrom           Int?
+  yearTo             Int?
+  bodyType           String?
+  fuelType           FuelType?
+  transmission       TransmissionType?
+  registrationNumber String?           @unique
+  vin                String?           @unique
+  imageUrl           String?
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  engines            VehicleEngine[]
+  parts              VehiclePart[]
+
+  @@index([make])
+  @@index([model])
+  @@index([yearFrom, yearTo])
+}
+
+model Engine {
+  id           String          @id @default(uuid()) @db.Uuid
+  engineCode   String          @unique
+  manufacturer String
+  name         String
+  engineFamily String?
+  displacement Float?
+  cylinders    Int?
+  fuelType     FuelType?
+  aspiration   String?
+  horsepower   Int?
+  torqueNm     Int?
+  imageUrl     String?
+  notes        String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  parts        EnginePart[]
+  vehicles     VehicleEngine[]
+
+  @@index([manufacturer])
+  @@index([engineFamily])
+}
+
+model VehicleEngine {
+  id        String   @id @default(uuid()) @db.Uuid
+  vehicleId String   @db.Uuid
+  engineId  String   @db.Uuid
+  notes     String?
+  createdAt DateTime @default(now())
+  engine    Engine   @relation(fields: [engineId], references: [id], onDelete: Cascade)
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, engineId])
+  @@index([engineId])
+}
+
+model Part {
+  id                   String             @id @default(uuid()) @db.Uuid
+  partNumber           String             @unique
+  oemNumber            String?
+  barcode              String?            @unique
+  name                 String
+  description          String?
+  manufacturer         String?
+  categoryId           String             @db.Uuid
+  costPrice            Decimal            @db.Decimal(12, 2)
+  sellingPrice         Decimal            @db.Decimal(12, 2)
+  minimumStock         Int                @default(5)
+  reorderQuantity      Int                @default(10)
+  unit                 String             @default("piece")
+  weightKg             Float?
+  imageUrl             String?
+  status               PartStatus         @default(ACTIVE)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  engineCompatibility  EnginePart[]
+  inventory            Inventory[]
+  category             Category           @relation(fields: [categoryId], references: [id])
+  purchaseItems        PurchaseItem[]
+  saleItems            SaleItem[]
+  stockTransactions    StockTransaction[]
+  vehicleCompatibility VehiclePart[]
+
+  @@index([categoryId])
+  @@index([manufacturer])
+  @@index([status])
+  @@index([oemNumber])
+}
+
+model EnginePart {
+  id        String   @id @default(uuid()) @db.Uuid
+  engineId  String   @db.Uuid
+  partId    String   @db.Uuid
+  notes     String?
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  engine    Engine   @relation(fields: [engineId], references: [id], onDelete: Cascade)
+  part      Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@unique([engineId, partId])
+  @@index([partId])
+}
+
+model VehiclePart {
+  id        String   @id @default(uuid()) @db.Uuid
+  vehicleId String   @db.Uuid
+  partId    String   @db.Uuid
+  notes     String?
+  createdAt DateTime @default(now())
+  part      Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, partId])
+  @@index([partId])
+}
+
+model WarehouseLocation {
+  id                String             @id @default(uuid()) @db.Uuid
+  code              String             @unique
+  name              String
+  zone              String?
+  description       String?
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  inventory         Inventory[]
+  stockTransactions StockTransaction[]
+}
+
+model Inventory {
+  id                String             @id @default(uuid()) @db.Uuid
+  partId            String             @db.Uuid
+  locationId        String             @db.Uuid
+  quantity          Int                @default(0)
+  reservedQuantity  Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  location          WarehouseLocation  @relation(fields: [locationId], references: [id])
+  part              Part               @relation(fields: [partId], references: [id])
+  stockTransactions StockTransaction[]
+
+  @@unique([partId, locationId])
+  @@index([locationId])
+  @@index([quantity])
+}
+
+model Supplier {
+  id           String     @id @default(uuid()) @db.Uuid
+  supplierCode String     @unique
+  name         String
+  contactName  String?
+  email        String?
+  phone        String?
+  address      String?
+  city         String?
+  taxNumber    String?
+  notes        String?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  purchases    Purchase[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
+model Customer {
+  id           String   @id @default(uuid()) @db.Uuid
+  customerCode String   @unique
+  name         String
+  email        String?
+  phone        String?
+  address      String?
+  city         String?
+  taxNumber    String?
+  notes        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  sales        Sale[]
+
+  @@index([name])
+  @@index([phone])
+  @@index([isActive])
+}
+
+model Purchase {
+  id                String             @id @default(uuid()) @db.Uuid
+  purchaseNumber    String             @unique
+  supplierId        String             @db.Uuid
+  createdById       String?            @db.Uuid
+  status            PurchaseStatus     @default(DRAFT)
+  purchaseDate      DateTime           @default(now())
+  receivedAt        DateTime?
+  subtotal          Decimal            @default(0) @db.Decimal(12, 2)
+  discount          Decimal            @default(0) @db.Decimal(12, 2)
+  tax               Decimal            @default(0) @db.Decimal(12, 2)
+  total             Decimal            @default(0) @db.Decimal(12, 2)
+  notes             String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  createdBy         UserProfile?       @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
+  supplier          Supplier           @relation(fields: [supplierId], references: [id])
+  items             PurchaseItem[]
+  stockTransactions StockTransaction[] @relation("PurchaseStockTransactions")
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([purchaseDate])
+}
+
+model PurchaseItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  purchaseId String   @db.Uuid
+  partId     String   @db.Uuid
+  quantity   Int
+  unitCost   Decimal  @db.Decimal(12, 2)
+  lineTotal  Decimal  @db.Decimal(12, 2)
+  createdAt  DateTime @default(now())
+  part       Part     @relation(fields: [partId], references: [id])
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([partId])
+}
+
+model Sale {
+  id                String             @id @default(uuid()) @db.Uuid
+  invoiceNumber     String             @unique
+  customerId        String?            @db.Uuid
+  createdById       String?            @db.Uuid
+  status            SaleStatus         @default(DRAFT)
+  paymentStatus     PaymentStatus      @default(PENDING)
+  saleDate          DateTime           @default(now())
+  subtotal          Decimal            @default(0) @db.Decimal(12, 2)
+  discount          Decimal            @default(0) @db.Decimal(12, 2)
+  tax               Decimal            @default(0) @db.Decimal(12, 2)
+  total             Decimal            @default(0) @db.Decimal(12, 2)
+  paidAmount        Decimal            @default(0) @db.Decimal(12, 2)
+  notes             String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  createdBy         UserProfile?       @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  customer          Customer?          @relation(fields: [customerId], references: [id])
+  items             SaleItem[]
+  stockTransactions StockTransaction[] @relation("SaleStockTransactions")
+
+  @@index([customerId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([saleDate])
+}
+
+model SaleItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  saleId    String   @db.Uuid
+  partId    String   @db.Uuid
+  quantity  Int
+  unitPrice Decimal  @db.Decimal(12, 2)
+  unitCost  Decimal  @db.Decimal(12, 2)
+  lineTotal Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+  part      Part     @relation(fields: [partId], references: [id])
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([partId])
+}
+
+model StockTransaction {
+  id            String               @id @default(uuid()) @db.Uuid
+  partId        String               @db.Uuid
+  inventoryId   String               @db.Uuid
+  locationId    String               @db.Uuid
+  userId        String?              @db.Uuid
+  purchaseId    String?              @db.Uuid
+  saleId        String?              @db.Uuid
+  type          StockTransactionType
+  quantity      Int
+  balanceAfter  Int?
+  referenceNote String?
+  createdAt     DateTime             @default(now())
+  inventory     Inventory            @relation(fields: [inventoryId], references: [id])
+  location      WarehouseLocation    @relation(fields: [locationId], references: [id])
+  part          Part                 @relation(fields: [partId], references: [id])
+  purchase      Purchase?            @relation("PurchaseStockTransactions", fields: [purchaseId], references: [id])
+  sale          Sale?                @relation("SaleStockTransactions", fields: [saleId], references: [id])
+  user          UserProfile?         @relation(fields: [userId], references: [id])
+
+  @@index([partId])
+  @@index([inventoryId])
+  @@index([locationId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String?      @db.Uuid
+  action    String
+  entity    String
+  entityId  String?
+  oldData   Json?
+  newData   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime     @default(now())
+  user      UserProfile? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity])
+  @@index([entityId])
+  @@index([createdAt])
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  SALES_STAFF
+  STOREKEEPER
+}
+
+enum PartStatus {
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+}
+
+enum PurchaseStatus {
+  DRAFT
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum SaleStatus {
+  DRAFT
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  REFUNDED
+}
+
+enum StockTransactionType {
+  PURCHASE_IN
+  SALE_OUT
+  CUSTOMER_RETURN
+  SUPPLIER_RETURN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  HYBRID
+  ELECTRIC
+  CNG
+  LPG
+  OTHER
+}
+
+enum TransmissionType {
+  MANUAL
+  AUTOMATIC
+  DCT
+  CVT
+  AMT
+  OTHER
+}
